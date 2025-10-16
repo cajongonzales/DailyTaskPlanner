@@ -1,7 +1,7 @@
 # src/planner/view/main_window.py
 from PySide6.QtWidgets import QMainWindow, QWidget, QHBoxLayout
-from planner.view.today_pane import TodayPane
-from planner.view.tasks_pane import TasksPane
+from daily_task_planner.view.today_pane import TodayPane
+from daily_task_planner.view.tasks_pane import TasksPane
 
 
 class MainWindow(QMainWindow):

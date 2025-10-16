@@ -2,12 +2,12 @@
 from PySide6.QtWidgets import QApplication
 import sys
 
-from planner.model.task_model import TaskModel, TasksModel
-from planner.view.today_pane import TodayPane
-from planner.view.tasks_pane import TasksPane
-from planner.presenter.today_presenter import TodayPresenter
-from planner.presenter.tasks_presenter import TasksPresenter
-from planner.view.main_window import MainWindow
+from daily_task_planner.model.task_model import TaskModel, TasksModel
+from daily_task_planner.view.today_pane import TodayPane
+from daily_task_planner.view.tasks_pane import TasksPane
+from daily_task_planner.presenter.today_presenter import TodayPresenter
+from daily_task_planner.presenter.tasks_presenter import TasksPresenter
+from daily_task_planner.view.main_window import MainWindow
 
 def main():
     app = QApplication(sys.argv)

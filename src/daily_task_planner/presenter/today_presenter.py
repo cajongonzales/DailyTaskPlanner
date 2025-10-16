@@ -1,5 +1,5 @@
 # src/planner/presenter/today_presenter.py
-from planner.model.task_model import TaskModel
+from daily_task_planner.model.task_model import TaskModel
 
 
 class TodayPresenter:
