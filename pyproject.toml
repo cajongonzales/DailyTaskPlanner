@@ -1,6 +1,6 @@
 [project]
 name = "daily-task-planner"
-version = "0.1.0"
+version = "0.2.0"
 description = "A daily task planner desktop app built with PySide6 (MVP architecture)"
 authors = [{ name = "Cajon Gonzales" }]
 readme = "README.md"
@@ -16,7 +16,11 @@ dev = [
     "pytest",
     "black",
     "ruff",
+    "pyinstaller>=5.15"
 ]
 
 [tool.uv]
 package = true
+
+[project.scripts]
+daily-task-planner = "daily_task_planner.main:main"
