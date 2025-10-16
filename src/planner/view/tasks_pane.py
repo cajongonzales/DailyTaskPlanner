@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt, Signal
 
 class TaskTab(QWidget):
     """A single task tab UI (title, story, deliverables, notes)."""
+    # Signals remain the same
     title_changed = Signal(str)
     user_story_changed = Signal(str)
     deliverable_added = Signal(str)
@@ -19,9 +20,9 @@ class TaskTab(QWidget):
         layout = QVBoxLayout(self)
 
         # --- Title ---
-        title_box = QLineEdit(task_data.title)
-        title_box.setStyleSheet("font-weight: bold; font-size: 16px;")
-        layout.addWidget(title_box)
+        self.title_box = QLineEdit(task_data.title)
+        self.title_box.setStyleSheet("font-weight: bold; font-size: 16px;")
+        layout.addWidget(self.title_box)
 
         # --- User Story ---
         story_group = QGroupBox("User Story")
@@ -46,7 +47,6 @@ class TaskTab(QWidget):
         notes_group = QGroupBox("Notes")
         notes_layout = QVBoxLayout()
         self.notes_text = QTextEdit(task_data.notes)
-        # Default to bullet list style
         self.notes_text.setPlaceholderText("• Write notes here...")
         notes_layout.addWidget(self.notes_text)
         notes_group.setLayout(notes_layout)
@@ -55,22 +55,26 @@ class TaskTab(QWidget):
         layout.addStretch()
 
         # Connect UI events
-        title_box.textChanged.connect(self.title_changed)
+        self.title_box.textChanged.connect(self.title_changed)
         self.story_text.textChanged.connect(lambda: self.user_story_changed.emit(self.story_text.toPlainText()))
         self.deliverable_input.returnPressed.connect(self._on_add_deliverable)
-        self.notes_text.textChanged.connect(lambda: self.notes_changed.emit(self.notes_text.toHtml()))
+        self.notes_text.textChanged.connect(lambda: self.notes_changed.emit(self.notes_text.toPlainText()))
 
-        self.title_box = title_box
+        # Populate deliverables from loaded data
+        self.populate_deliverables(task_data.deliverables)
 
     def populate_deliverables(self, deliverables):
+        # Prevent signals from firing while populating
         self.deliverables_list.blockSignals(True)
         self.deliverables_list.clear()
-        for i, d in enumerate(deliverables):
+        for d in deliverables:
             item = QListWidgetItem(d.description)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
             item.setCheckState(Qt.Checked if d.complete else Qt.Unchecked)
             self.deliverables_list.addItem(item)
         self.deliverables_list.blockSignals(False)
+
+        # Connect checkboxes
         self.deliverables_list.itemChanged.connect(self._on_deliverable_checked)
 
     def _on_add_deliverable(self):
