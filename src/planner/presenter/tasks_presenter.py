@@ -9,6 +9,10 @@ class TasksPresenter:
 
         view.add_task_requested.connect(self.add_task)
         view.remove_task_requested.connect(self.remove_task)
+        
+        for index, task in enumerate(self.model.tasks):
+            tab = self.view.add_task_tab(task, index)
+            self._connect_tab_signals(tab, index)
 
     def add_task(self):
         self.model.add_task()
