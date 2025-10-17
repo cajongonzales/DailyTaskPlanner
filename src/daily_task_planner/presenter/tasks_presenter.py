@@ -32,6 +32,8 @@ class TasksPresenter:
         tab.deliverable_checked.connect(lambda di, c: self._set_deliverable_complete(index, di, c))
         tab.notes_changed.connect(lambda notes: self._update_notes(index, notes))
         tab.deliverables_reordered.connect(lambda order: self._reorder_deliverables(index, order))
+        tab.deliverable_deleted.connect(lambda di: self._remove_deliverable(index, di))
+
 
     def _update_title(self, index, title):
         self.model.update_title(index, title)
@@ -55,3 +57,9 @@ class TasksPresenter:
             self.model.reorder_deliverables(task_index, new_order)
             tab = self.view.tabs.widget(task_index)
             tab.populate_deliverables(self.model.tasks[task_index].deliverables)
+    
+    def _remove_deliverable(self, task_index, deliverable_index):
+        self.model.remove_deliverable(task_index, deliverable_index)
+        tab = self.view.tabs.widget(task_index)
+        tab.populate_deliverables(self.model.tasks[task_index].deliverables)
+        self.model.save()  # persist the deletion

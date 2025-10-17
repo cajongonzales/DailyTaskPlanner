@@ -115,6 +115,7 @@ class TaskModel:
             print(f"[WARN] Could not load TODAY data: {e}")
 
 
+
 # -----------------------------
 # TASKS pane models
 # -----------------------------
@@ -230,3 +231,9 @@ class TasksModel:
                 reordered.append(Deliverable(description=desc, complete=complete))
             self.tasks[task_index].deliverables = reordered
             self.save()
+
+    def remove_deliverable(self, task_index: int, deliverable_index: int):
+        if 0 <= task_index < len(self.tasks):
+            deliverables = self.tasks[task_index].deliverables
+            if 0 <= deliverable_index < len(deliverables):
+                del deliverables[deliverable_index]
