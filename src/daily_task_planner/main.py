@@ -13,7 +13,8 @@ def main():
     app = QApplication(sys.argv)
 
     today_model = TaskModel()
-    today_view = TodayPane()
+    today_model.load()
+    today_view = TodayPane(today_model.data.tasks)
     today_presenter = TodayPresenter(today_view, today_model)
 
     tasks_model = TasksModel()
