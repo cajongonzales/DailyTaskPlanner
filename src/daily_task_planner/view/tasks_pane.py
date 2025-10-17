@@ -1,7 +1,8 @@
 # src/planner/view/tasks_pane.py
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLineEdit, QTextEdit, QGroupBox, QVBoxLayout,
-    QTabWidget, QPushButton, QHBoxLayout, QListWidget, QListWidgetItem, QCheckBox
+    QTabWidget, QPushButton, QHBoxLayout, QListWidget, QListWidgetItem,
+    QMenu
 )
 from PySide6.QtCore import Qt, Signal
 
@@ -15,6 +16,8 @@ class TaskTab(QWidget):
     deliverable_changed = Signal(int, str)
     deliverable_checked = Signal(int, bool)
     deliverables_reordered = Signal(list)  # emits list of (text, checked) tuples
+    deliveraddble_removed = Signal(int)  # index of deliverable to remove
+    deliverable_deleted = Signal(int)
     notes_changed = Signal(str)
 
     def __init__(self, task_data):
@@ -48,6 +51,11 @@ class TaskTab(QWidget):
         deliverables_layout.addWidget(self.deliverables_list)
         deliverables_layout.addWidget(self.deliverable_input)
         deliverables_group.setLayout(deliverables_layout)
+        self.deliverables_list.keyPressEvent = self._on_deliverable_key
+        # Custom Right-click Menu
+        self.deliverables_list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.deliverables_list.customContextMenuRequested.connect(self._on_deliverable_context_menu)
+
         layout.addWidget(deliverables_group)
 
         # --- Notes ---
@@ -117,6 +125,17 @@ class TaskTab(QWidget):
         if idx == self._editing_index:
             self.deliverable_changed.emit(idx, item.text())
             self._editing_index = None
+    
+    def _on_deliverable_key(self, event):
+        if event.key() == Qt.Key_Delete:
+            item = self.deliverables_list.currentItem()
+            if item:
+                idx = self.deliverables_list.row(item)
+                self.deliverable_deleted.emit(idx)
+        else:
+            # default behavior
+            super(QListWidget, self.deliverables_list).keyPressEvent(event)
+
 
     # Override drop event to detect reordering
     def dropEvent(self, event):
@@ -130,6 +149,19 @@ class TaskTab(QWidget):
 
         # Emit a signal to presenter
         self.deliverables_reordered.emit(new_order)
+
+    def _on_deliverable_context_menu(self, pos):
+        item = self.deliverables_list.itemAt(pos)
+        if item is None:
+            return
+
+        menu = QMenu()
+        delete_action = menu.addAction("Delete")
+        action = menu.exec(self.deliverables_list.mapToGlobal(pos))
+        
+        if action == delete_action:
+            index = self.deliverables_list.row(item)
+            self.deliverable_deleted.emit(index)
 
 
 class TasksPane(QWidget):
