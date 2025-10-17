@@ -169,3 +169,11 @@ class TasksModel:
                 json.dump([t.to_dict() for t in self.tasks], f, indent=2)
         except Exception as e:
             print(f"Error saving tasks: {e}")
+
+    def reorder_deliverables(self, task_index: int, new_order: list[tuple[str, bool]]):
+        if 0 <= task_index < len(self.tasks):
+            reordered = []
+            for desc, complete in new_order:
+                reordered.append(Deliverable(description=desc, complete=complete))
+            self.tasks[task_index].deliverables = reordered
+            self.save()
