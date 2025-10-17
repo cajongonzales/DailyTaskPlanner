@@ -12,7 +12,9 @@ class TaskTab(QWidget):
     title_changed = Signal(str)
     user_story_changed = Signal(str)
     deliverable_added = Signal(str)
+    deliverable_changed = Signal(int, str)
     deliverable_checked = Signal(int, bool)
+    deliverables_reordered = Signal(list)  # emits list of (text, checked) tuples
     notes_changed = Signal(str)
 
     def __init__(self, task_data):
@@ -36,6 +38,11 @@ class TaskTab(QWidget):
         deliverables_group = QGroupBox("Deliverables")
         deliverables_layout = QVBoxLayout()
         self.deliverables_list = QListWidget()
+        # Make drag and drop
+        self.deliverables_list.setDragDropMode(QListWidget.InternalMove)
+        self.deliverables_list.setDefaultDropAction(Qt.MoveAction)
+        self.deliverables_list.setSelectionMode(QListWidget.SingleSelection)
+        # Make editable
         self.deliverable_input = QLineEdit()
         self.deliverable_input.setPlaceholderText("Add a new deliverable and press Enter")
         deliverables_layout.addWidget(self.deliverables_list)
@@ -63,13 +70,24 @@ class TaskTab(QWidget):
         # Populate deliverables from loaded data
         self.populate_deliverables(task_data.deliverables)
 
+        # Allow editing on double click
+        self.deliverables_list.itemDoubleClicked.connect(self._on_edit_deliverable)
+
+        # Track edits finished
+        self.deliverables_list.itemChanged.connect(self._on_deliverable_changed)
+
+        # For internal tracking
+        self._editing_index = None 
+
     def populate_deliverables(self, deliverables):
         # Prevent signals from firing while populating
         self.deliverables_list.blockSignals(True)
         self.deliverables_list.clear()
         for d in deliverables:
             item = QListWidgetItem(d.description)
-            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setFlags(
+                item.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsEditable 
+            )
             item.setCheckState(Qt.Checked if d.complete else Qt.Unchecked)
             self.deliverables_list.addItem(item)
         self.deliverables_list.blockSignals(False)
@@ -87,6 +105,32 @@ class TaskTab(QWidget):
         idx = self.deliverables_list.row(item)
         checked = item.checkState() == Qt.Checked
         self.deliverable_checked.emit(idx, checked)
+
+    # When user double-clicks, start editing
+    def _on_edit_deliverable(self, item):
+        self._editing_index = self.deliverables_list.row(item)
+        self.deliverables_list.editItem(item)
+
+    # When editing finishes, emit change signal
+    def _on_deliverable_changed(self, item):
+        idx = self.deliverables_list.row(item)
+        if idx == self._editing_index:
+            self.deliverable_changed.emit(idx, item.text())
+            self._editing_index = None
+
+    # Override drop event to detect reordering
+    def dropEvent(self, event):
+        super().dropEvent(event)
+
+        # After the drop finishes, rebuild the order list
+        new_order = []
+        for i in range(self.deliverables_list.count()):
+            item = self.deliverables_list.item(i)
+            new_order.append((item.text(), item.checkState() == Qt.Checked))
+
+        # Emit a signal to presenter
+        self.deliverables_reordered.emit(new_order)
+
 
 class TasksPane(QWidget):
     add_task_requested = Signal()
