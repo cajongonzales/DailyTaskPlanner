@@ -12,6 +12,7 @@ class TodayPresenter:
         view.task_checked.connect(self.set_task_complete)
         view.meeting_added.connect(self.add_meeting)
         view.notes_changed.connect(self.update_notes)
+        view.meeting_removed.connect(self.handle_meeting_removed)
 
         self.view.task_edited.connect(self.handle_task_edited)
         self.view.task_reordered.connect(self.handle_task_reordered)
@@ -30,6 +31,10 @@ class TodayPresenter:
     def add_meeting(self, time: str, desc: str):
         self.model.add_meeting(time, desc)
         self.refresh_view()
+    
+    def handle_meeting_removed(self, index):
+        self.model.remove_meeting(index)
+        self.view.update_meetings(self.model.data.meetings)
 
     def update_notes(self, text: str):
         self.model.set_notes(text)
@@ -41,9 +46,9 @@ class TodayPresenter:
 
     def handle_task_edited(self, index: int, new_text: str):
         self.model.update_task_description(index, new_text)
-        self.view.populate_tasks(self.model.data.tasks)
+        self.view.update_task_list(self.model.data.tasks)
 
     def handle_task_reordered(self, old_index: int, new_index: int):
         self.model.move_task(old_index, new_index)
-        self.view.populate_tasks(self.model.data.tasks)
+        self.view.update_task_list(self.model.data.tasks)
         self.model.save()
