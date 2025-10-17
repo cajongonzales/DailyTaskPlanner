@@ -50,6 +50,22 @@ class TaskModel:
         if 0 <= index < len(self.data.tasks):
             del self.data.tasks[index]
             self.save()
+    
+    def _on_tasks_reordered(self, new_order):
+        self.model.reorder_tasks(new_order)
+        self.model.save()
+    
+    def update_task_description(self, index: int, description: str):
+        """Update the text of a task at the given index."""
+        if 0 <= index < len(self.data.tasks):
+            self.data.tasks[index].description = description
+    
+    def move_task(self, old_index: int, new_index: int):
+        """Move a task from old_index to new_index (for reordering)."""
+        tasks = self.data.tasks
+        if 0 <= old_index < len(tasks) and 0 <= new_index < len(tasks):
+            task = tasks.pop(old_index)
+            tasks.insert(new_index, task)
 
     # --- Meetings ---
     def add_meeting(self, time: str, description: str):

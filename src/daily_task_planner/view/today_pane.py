@@ -11,10 +11,12 @@ class TodayPane(QWidget):
     # Signals that will notify the presenter
     task_added = Signal(str)
     task_checked = Signal(int, bool)
+    task_edited = Signal(int, str)
+    task_reordered = Signal(int, int)
     meeting_added = Signal(str, str)
     notes_changed = Signal(str)
 
-    def __init__(self):
+    def __init__(self, tasks):
         super().__init__()
         layout = QVBoxLayout(self)
 
@@ -23,7 +25,12 @@ class TodayPane(QWidget):
         tasks_layout = QVBoxLayout()
         self.task_list = QListWidget()
         self.task_input = QLineEdit()
+        # Enable inline edit and drag/drop reordering
+        self.task_list.setEditTriggers(QListWidget.DoubleClicked)
+        self.task_list.setDragDropMode(QListWidget.InternalMove)
+        self.task_list.setDefaultDropAction(Qt.MoveAction)
         self.task_input.setPlaceholderText("Add a new task and press Enter")
+        self.populate_tasks(tasks)
         tasks_layout.addWidget(self.task_list)
         tasks_layout.addWidget(self.task_input)
         tasks_group.setLayout(tasks_layout)
@@ -66,6 +73,9 @@ class TodayPane(QWidget):
         self.add_meeting_button.clicked.connect(self._on_meeting_added)
         self.notes_text.textChanged.connect(self._on_notes_changed)
         self.task_list.itemChanged.connect(self._on_task_checked)
+        # --- Signals ---
+        self.task_list.itemChanged.connect(self._on_task_changed)
+        self.task_list.model().rowsMoved.connect(self._on_rows_moved)
 
     # === UI Event Handlers ===
     def _on_task_entered(self):
@@ -134,3 +144,82 @@ class TodayPane(QWidget):
     def update_notes(self, text):
         if text != self.notes_text.toPlainText():
             self.notes_text.setPlainText(text)
+
+    def populate_tasks(self, tasks):
+        self.task_list.blockSignals(True)
+        self.task_list.clear()
+        for t in tasks:
+            item = QListWidgetItem(t.description)
+            item.setFlags(item.flags() | Qt.ItemIsEditable | Qt.ItemIsDragEnabled | Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+            self.task_list.addItem(item)
+        self.task_list.blockSignals(False)
+
+    def _on_task_changed(self, item):
+        index = self.task_list.row(item)
+        new_text = item.text().strip()
+        self.task_edited.emit(index, new_text)
+
+    def _on_rows_moved(self, parent, start, end, destination, row):
+        """
+        Qt calls this after rows are dropped.
+        - start: old index
+        - row: new index (after drop)
+        """
+        if start != row and row <= self.task_list.count():
+            # Adjust if the item was moved downward
+            new_index = row if row < start else row - 1
+            self.task_reordered.emit(start, new_index)
+
+    def _create_task_item(self, task):
+        """
+        Helper to create a QListWidgetItem from a Task object,
+        ensuring it’s checkable, editable, draggable, and selectable.
+        """
+        item = QListWidgetItem(task.description)
+        item.setFlags(
+            Qt.ItemIsUserCheckable
+            | Qt.ItemIsEditable
+            | Qt.ItemIsDragEnabled
+            | Qt.ItemIsEnabled
+            | Qt.ItemIsSelectable
+        )
+        item.setCheckState(Qt.Checked if task.complete else Qt.Unchecked)
+        return item
+    
+    def populate_tasks(self, tasks):
+        self.task_list.blockSignals(True)
+        self.task_list.clear()
+        for t in tasks:
+            item = self._create_task_item(t)
+            self.task_list.addItem(item)
+        self.task_list.blockSignals(False)
+
+    def update_task_list(self, tasks):
+        """
+        Rebuild the QListWidget from the given tasks list.
+        Block signals while populating to avoid spurious itemChanged events.
+        """
+        self.task_list.blockSignals(True)
+        try:
+            self.task_list.clear()
+            for task in tasks:
+                item = self._create_task_item(task)
+                self.task_list.addItem(item)
+        finally:
+            self.task_list.blockSignals(False)
+
+    def _on_task_changed(self, item):
+        index = self.task_list.row(item)
+        new_text = item.text().strip()
+        self.task_edited.emit(index, new_text)
+
+    def _on_rows_moved(self, parent, start, end, destination, row):
+        """
+        Qt calls this after rows are dropped.
+        - start: old index
+        - row: new index (after drop)
+        """
+        if start != row and row <= self.task_list.count():
+            # Adjust if the item was moved downward
+            new_index = row if row < start else row - 1
+            self.task_reordered.emit(start, new_index)
