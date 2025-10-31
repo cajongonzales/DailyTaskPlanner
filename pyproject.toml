@@ -1,6 +1,6 @@
 [project]
 name = "daily-task-planner"
-version = "0.10.0"
+version = "0.11.0"
 description = "A daily task planner desktop app built with PySide6 (MVP architecture)"
 authors = [{ name = "Cajon Gonzales" }]
 readme = "README.md"
