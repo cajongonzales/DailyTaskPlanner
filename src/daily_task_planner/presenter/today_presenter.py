@@ -1,80 +1,69 @@
 # src/planner/presenter/today_presenter.py
-from daily_task_planner.model.task_model import TaskModel
+from daily_task_planner.model.task_model import UnifiedModel
 
 
 class TodayPresenter:
-    def __init__(self, view, model: TaskModel):
+    def __init__(self, view, model: UnifiedModel):
         self.view = view
         self.model = model
 
-        # --- Connect view signals ---
-        view.task_added.connect(self._on_task_added)
-        view.task_changed.connect(self._on_task_changed)
-        view.task_checked.connect(self._on_task_checked)
-        view.task_reordered.connect(self._on_task_reordered)
-        view.task_deleted.connect(self._on_task_deleted)
+        # Connect signals
+        view.task_added.connect(self.add_task)
+        view.task_changed.connect(self.edit_task)
+        view.task_checked.connect(self.set_task_complete)
+        view.task_reordered.connect(self.reorder_tasks)
+        view.task_deleted.connect(self.delete_task)
 
-        view.meeting_added.connect(self._on_meeting_added)
-        view.meeting_removed.connect(self._on_meeting_removed)
-        view.notes_changed.connect(self._on_notes_changed)
+        view.meeting_added.connect(self.add_meeting)
+        view.meeting_removed.connect(self.remove_meeting)
+        view.notes_changed.connect(self.update_notes)
 
-        # Initial load
+        # Initial render
         self.refresh_view()
 
-    # === TASK HANDLERS ===
-    def _on_task_added(self, description: str):
-        """Add a new task and refresh."""
-        self.model.add_task(description)
-        self.model.save()
+    # --- TODAY Tasks ---
+    def add_task(self, description: str):
+        self.model.add_today_task(description)
         self.refresh_view()
 
-    def _on_task_changed(self, index: int, text: str):
-        """Update task text after editing."""
-        self.model.update_task_description(index, text)
-        self.model.save()
-        self.refresh_view()
-
-    def _on_task_checked(self, index: int, complete: bool):
-        """Update completion state."""
-        # Defensive: avoid crash from async checkbox race
-        if 0 <= index < len(self.model.data.tasks):
-            self.model.set_task_complete(index, complete)
+    def edit_task(self, index: int, new_text: str):
+        if 0 <= index < len(self.model.today.tasks):
+            self.model.today.tasks[index].description = new_text
             self.model.save()
-            # No full refresh; only update checkboxes
-            self.view.update_task_list(self.model.data.tasks)
+            self.refresh_view()
 
-    def _on_task_reordered(self, old_index: int, new_index: int):
-        """Persist reordered tasks."""
-        self.model.move_task(old_index, new_index)
-        self.model.save()
-        self.view.update_task_list(self.model.data.tasks)
+    def set_task_complete(self, index: int, complete: bool):
+        self.model.set_today_task_complete(index, complete)
+        self.refresh_view()
 
-    def _on_task_deleted(self, index: int):
-        """Handle right-click delete."""
-        if 0 <= index < len(self.model.data.tasks):
-            self.model.remove_task(index)
+    def reorder_tasks(self, old_index: int, new_index: int):    
+        tasks = self.model.today.tasks
+        if 0 <= old_index < len(tasks) and 0 <= new_index < len(tasks):
+            task = tasks.pop(old_index)
+            tasks.insert(new_index, task)
             self.model.save()
-            self.view.update_task_list(self.model.data.tasks)
+            self.refresh_view()
 
-    # === MEETING HANDLERS ===
-    def _on_meeting_added(self, time: str, desc: str):
+    def delete_task(self, index: int):
+        self.model.remove_today_task(index)
+        self.refresh_view()
+
+    # --- Meetings ---
+    def add_meeting(self, time: str, desc: str):
         self.model.add_meeting(time, desc)
-        self.model.save()
-        self.view.update_meetings(self.model.data.meetings)
+        self.refresh_view()
 
-    def _on_meeting_removed(self, index: int):
+    def remove_meeting(self, index: int):
         self.model.remove_meeting(index)
-        self.model.save()
-        self.view.update_meetings(self.model.data.meetings)
+        self.refresh_view()
 
-    # === NOTES HANDLER ===
-    def _on_notes_changed(self, text: str):
-        self.model.set_notes(text)
-        self.model.save()
+    # --- Notes ---
+    def update_notes(self, text: str):
+        self.model.set_today_notes(text)
+        self.refresh_view()
 
-    # === REFRESH ===
+    # --- Refresh ---
     def refresh_view(self):
-        """Rebuild the entire view from model data."""
-        self.view.update_task_list(self.model.data.tasks)
-        self.view.update_meetings(self.model.data.meetings)
-        self.view.update_notes(self.model.data.notes)
+        self.view.update_task_list(self.model.today.tasks)
+        self.view.update_meetings(self.model.today.meetings)
+        self.view.update_notes(self.model.today.notes)

@@ -1,27 +1,28 @@
-# src/planner/view/tasks_pane.py
+# src/daily_task_planner/view/tasks_pane.py
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QLineEdit, QTextEdit, QGroupBox, QVBoxLayout,
-    QTabWidget, QPushButton, QHBoxLayout, QListWidget, QListWidgetItem,
-    QMenu
+    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QTabWidget,
+    QPushButton, QLineEdit, QTextEdit, QMenu, QListWidgetItem
 )
 from PySide6.QtCore import Qt, Signal
+from daily_task_planner.view.deliverables_list import DeliverablesList
 
 
 class TaskTab(QWidget):
     """A single task tab UI (title, story, deliverables, notes)."""
-    # Signals remain the same
     title_changed = Signal(str)
     user_story_changed = Signal(str)
     deliverable_added = Signal(str)
     deliverable_changed = Signal(int, str)
     deliverable_checked = Signal(int, bool)
-    deliverables_reordered = Signal(list)  # emits list of (text, checked) tuples
     deliverable_deleted = Signal(int)
+    deliverables_reordered = Signal(int, list)
     notes_changed = Signal(str)
 
-    def __init__(self, task_data):
+    def __init__(self, task_data, task_index=None):
         super().__init__()
         layout = QVBoxLayout(self)
+        self._task_index = task_index
+        self._editing_index = None
 
         # --- Title ---
         self.title_box = QLineEdit(task_data.title)
@@ -39,69 +40,43 @@ class TaskTab(QWidget):
         # --- Deliverables ---
         deliverables_group = QGroupBox("Deliverables")
         deliverables_layout = QVBoxLayout()
-        self.deliverables_list = QListWidget()
-        # Make drag and drop
-        self.deliverables_list.setDragDropMode(QListWidget.InternalMove)
-        self.deliverables_list.setDefaultDropAction(Qt.MoveAction)
-        self.deliverables_list.setSelectionMode(QListWidget.SingleSelection)
-        # Make editable
+
+        self.deliverables_list = DeliverablesList(task_index=self._task_index)
+        self.deliverables_list.reordered.connect(self.deliverables_reordered)
+
         self.deliverable_input = QLineEdit()
         self.deliverable_input.setPlaceholderText("Add a new deliverable and press Enter")
+
         deliverables_layout.addWidget(self.deliverables_list)
         deliverables_layout.addWidget(self.deliverable_input)
         deliverables_group.setLayout(deliverables_layout)
-        self.deliverables_list.keyPressEvent = self._on_deliverable_key
-        # Custom Right-click Menu
-        self.deliverables_list.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.deliverables_list.customContextMenuRequested.connect(self._on_deliverable_context_menu)
-
-        #self.deliverables_list.model().rowsMoved.connect(self._on_reordered)
         layout.addWidget(deliverables_group)
 
         # --- Notes ---
         notes_group = QGroupBox("Notes")
         notes_layout = QVBoxLayout()
         self.notes_text = QTextEdit(task_data.notes)
-        self.notes_text.setPlaceholderText("• Write notes here...")
         notes_layout.addWidget(self.notes_text)
         notes_group.setLayout(notes_layout)
         layout.addWidget(notes_group)
-
         layout.addStretch()
 
-        # Connect UI events
+        # Connect signals
         self.title_box.textChanged.connect(self.title_changed)
         self.story_text.textChanged.connect(lambda: self.user_story_changed.emit(self.story_text.toPlainText()))
-        self.deliverable_input.returnPressed.connect(self._on_add_deliverable)
         self.notes_text.textChanged.connect(lambda: self.notes_changed.emit(self.notes_text.toPlainText()))
+        self.deliverable_input.returnPressed.connect(self._on_add_deliverable)
 
-        # Populate deliverables from loaded data
+        self.deliverables_list.itemChanged.connect(self._on_deliverable_checked)
+        self.deliverables_list.itemDoubleClicked.connect(self._on_edit_deliverable)
+        self.deliverables_list.itemChanged.connect(self._on_deliverable_changed)
+        self.deliverables_list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.deliverables_list.customContextMenuRequested.connect(self._on_deliverable_context_menu)
+
         self.populate_deliverables(task_data.deliverables)
 
-        # Allow editing on double click
-        self.deliverables_list.itemDoubleClicked.connect(self._on_edit_deliverable)
-
-        # Track edits finished
-        self.deliverables_list.itemChanged.connect(self._on_deliverable_changed)
-
-        # For internal tracking
-        self._editing_index = None 
-
     def populate_deliverables(self, deliverables):
-        # Prevent signals from firing while populating
-        self.deliverables_list.blockSignals(True)
-        self.deliverables_list.clear()
-        for d in deliverables:
-            item = QListWidgetItem(d.description)
-            item.setFlags(
-                item.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsEditable 
-            )
-            item.setCheckState(Qt.Checked if d.complete else Qt.Unchecked)
-            self.deliverables_list.addItem(item)
-        self.deliverables_list.blockSignals(False)
-
-        # Connect checkboxes
-        self.deliverables_list.itemChanged.connect(self._on_deliverable_checked)
+        self.deliverables_list.populate(deliverables)
 
     def _on_add_deliverable(self):
         text = self.deliverable_input.text().strip()
@@ -114,73 +89,41 @@ class TaskTab(QWidget):
         checked = item.checkState() == Qt.Checked
         self.deliverable_checked.emit(idx, checked)
 
-    # When user double-clicks, start editing
     def _on_edit_deliverable(self, item):
         self._editing_index = self.deliverables_list.row(item)
         self.deliverables_list.editItem(item)
 
-    # When editing finishes, emit change signal
     def _on_deliverable_changed(self, item):
         idx = self.deliverables_list.row(item)
         if idx == self._editing_index:
             self.deliverable_changed.emit(idx, item.text())
             self._editing_index = None
-    
-    def _on_deliverable_key(self, event):
-        if event.key() == Qt.Key_Delete:
-            item = self.deliverables_list.currentItem()
-            if item:
-                idx = self.deliverables_list.row(item)
-                self.deliverable_deleted.emit(idx)
-        else:
-            # default behavior
-            super(QListWidget, self.deliverables_list).keyPressEvent(event)
-
-
-    # Override drop event to detect reordering
-    def dropEvent(self, event):
-        super().dropEvent(event)
-
-        # After the drop finishes, rebuild the order list
-        new_order = []
-        for i in range(self.deliverables_list.count()):
-            item = self.deliverables_list.item(i)
-            new_order.append((item.text(), item.checkState() == Qt.Checked))
-
-        # Emit a signal to presenter
-        self.deliverables_reordered.emit(new_order)
 
     def _on_deliverable_context_menu(self, pos):
         item = self.deliverables_list.itemAt(pos)
         if item is None:
             return
-
         menu = QMenu()
         delete_action = menu.addAction("Delete")
         action = menu.exec(self.deliverables_list.mapToGlobal(pos))
-        
         if action == delete_action:
             index = self.deliverables_list.row(item)
             self.deliverable_deleted.emit(index)
 
-    #def _on_reordered(self, parent, start, end, dest, row):
-    #    self.deliverables_reordered.emit(start, row if row < self.deliverables_list.count() else self.deliverables_list.count() - 1)
 
 class TasksPane(QWidget):
+    """Container for multiple TaskTabs as tabs."""
     add_task_requested = Signal()
     remove_task_requested = Signal(int)
-    # Forward sub-signals from active tab via presenter
 
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
 
-        # Tab widget with tabs at the bottom
         self.tabs = QTabWidget()
         self.tabs.setTabPosition(QTabWidget.South)
         layout.addWidget(self.tabs)
 
-        # Buttons row
         button_layout = QHBoxLayout()
         self.add_button = QPushButton("Add Task")
         self.remove_button = QPushButton("Remove Task")
@@ -191,14 +134,8 @@ class TasksPane(QWidget):
         self.add_button.clicked.connect(lambda: self.add_task_requested.emit())
         self.remove_button.clicked.connect(self._on_remove_clicked)
 
-    def _on_remove_clicked(self):
-        idx = self.tabs.currentIndex()
-        if idx >= 0:
-            self.remove_task_requested.emit(idx)
-
     def add_task_tab(self, task_data, index=None):
-        tab = TaskTab(task_data)
-        tab.populate_deliverables(task_data.deliverables)
+        tab = TaskTab(task_data, task_index=index)
         idx = self.tabs.addTab(tab, task_data.title)
         self.tabs.setCurrentIndex(idx)
         return tab
@@ -213,3 +150,7 @@ class TasksPane(QWidget):
         for i, task in enumerate(tasks):
             self.tabs.setTabText(i, task.title)
 
+    def _on_remove_clicked(self):
+        idx = self.tabs.currentIndex()
+        if idx >= 0:
+            self.remove_task_requested.emit(idx)
