@@ -14,7 +14,7 @@ def main():
 
     today_model = TaskModel()
     today_model.load()
-    today_view = TodayPane(today_model.data.tasks)
+    today_view = TodayPane()
     today_presenter = TodayPresenter(today_view, today_model)
 
     tasks_model = TasksModel()
@@ -25,7 +25,6 @@ def main():
     window.show()
 
     sys.exit(app.exec())
-
 
 if __name__ == "__main__":
     main()

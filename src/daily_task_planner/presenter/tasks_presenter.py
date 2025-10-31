@@ -54,9 +54,24 @@ class TasksPresenter:
         self.model.update_notes(index, notes)
 
     def _reorder_deliverables(self, task_index, new_order):
-            self.model.reorder_deliverables(task_index, new_order)
-            tab = self.view.tabs.widget(task_index)
-            tab.populate_deliverables(self.model.tasks[task_index].deliverables)
+        """Reorder deliverables safely even if duplicates exist."""
+        task = self.model.tasks[task_index]
+        old_deliverables = task.deliverables.copy()
+        reordered = []
+
+        for text, checked in new_order:
+            # Find the first unmatched deliverable that matches text and checked state
+            for d in old_deliverables:
+                if d.description == text and d.complete == checked and d not in reordered:
+                    reordered.append(d)
+                    break
+            else:
+                # If no match found, create a new deliverable object
+                from daily_task_planner.model.task_model import Deliverable
+                reordered.append(Deliverable(description=text, complete=checked))
+
+        task.deliverables = reordered
+        self.model.save()      
     
     def _remove_deliverable(self, task_index, deliverable_index):
         self.model.remove_deliverable(task_index, deliverable_index)

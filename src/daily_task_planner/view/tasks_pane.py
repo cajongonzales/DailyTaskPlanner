@@ -16,7 +16,6 @@ class TaskTab(QWidget):
     deliverable_changed = Signal(int, str)
     deliverable_checked = Signal(int, bool)
     deliverables_reordered = Signal(list)  # emits list of (text, checked) tuples
-    deliveraddble_removed = Signal(int)  # index of deliverable to remove
     deliverable_deleted = Signal(int)
     notes_changed = Signal(str)
 
@@ -56,6 +55,7 @@ class TaskTab(QWidget):
         self.deliverables_list.setContextMenuPolicy(Qt.CustomContextMenu)
         self.deliverables_list.customContextMenuRequested.connect(self._on_deliverable_context_menu)
 
+        #self.deliverables_list.model().rowsMoved.connect(self._on_reordered)
         layout.addWidget(deliverables_group)
 
         # --- Notes ---
@@ -163,6 +163,8 @@ class TaskTab(QWidget):
             index = self.deliverables_list.row(item)
             self.deliverable_deleted.emit(index)
 
+    #def _on_reordered(self, parent, start, end, dest, row):
+    #    self.deliverables_reordered.emit(start, row if row < self.deliverables_list.count() else self.deliverables_list.count() - 1)
 
 class TasksPane(QWidget):
     add_task_requested = Signal()

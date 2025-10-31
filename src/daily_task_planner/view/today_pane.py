@@ -1,206 +1,179 @@
+# src/planner/view/today_pane.py
+from PySide6.QtCore import Qt, Signal, QPoint, QTimer
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QPushButton,
-    QLineEdit, QTableWidget, QTableWidgetItem, QTextEdit, QListWidget,
-    QListWidgetItem
+    QWidget, QVBoxLayout, QListWidget, QListWidgetItem, 
+    QLineEdit, QMenu, QLabel, QPushButton, QTextEdit, QGroupBox
 )
-from PySide6.QtCore import Qt, Signal
-import json
-from pathlib import Path
-
 
 class TodayPane(QWidget):
-    # Signals for presenter
+    # --- Signals for presenter ---
     task_added = Signal(str)
+    task_changed = Signal(int, str)
     task_checked = Signal(int, bool)
-    task_edited = Signal(int, str)
-    task_reordered = Signal(int, int)
+    task_reordered = Signal(list)
+    task_deleted = Signal(int)
+
     meeting_added = Signal(str, str)
     meeting_removed = Signal(int)
     notes_changed = Signal(str)
 
-    STORAGE_PATH = Path.home() / ".daily_task_planner_meetings.json"
+    def __init__(self, parent=None):
+        super().__init__(parent)
 
-    def __init__(self, tasks):
-        super().__init__()
         layout = QVBoxLayout(self)
 
-        # --- Tasks ---
-        tasks_group = QGroupBox("Get Done Today")
-        tasks_layout = QVBoxLayout()
+        # === TASKS SECTION ===
+        task_group = QGroupBox("Tasks For Today")
+        task_layout = QVBoxLayout()
         self.task_list = QListWidget()
-        self.task_input = QLineEdit()
-        self.task_list.setEditTriggers(QListWidget.DoubleClicked)
+        # Make drag and drop
         self.task_list.setDragDropMode(QListWidget.InternalMove)
         self.task_list.setDefaultDropAction(Qt.MoveAction)
-        self.task_input.setPlaceholderText("Add a new task and press Enter")
-        self._populate_tasks(tasks)
-        tasks_layout.addWidget(self.task_list)
-        tasks_layout.addWidget(self.task_input)
-        tasks_group.setLayout(tasks_layout)
-        layout.addWidget(tasks_group)
+        self.task_list.setSelectionMode(QListWidget.SingleSelection)
 
-        # --- Meetings ---
-        meetings_group = QGroupBox("Meetings")
-        meetings_layout = QVBoxLayout()
+        self.task_input = QLineEdit()
+        self.task_input.setPlaceholderText("Add a task...")
+        layout.addWidget(self.task_list)
+        layout.addWidget(self.task_input)
+        task_group.setLayout(task_layout)
+        self.task_list.keyPressEvent = self._on_task_key 
+        self.task_list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.task_list.customContextMenuRequested.connect(self._on_task_context_menu)
+        layout.addWidget(task_group)
+        
+        # === MEETINGS SECTION ===
+        layout.addWidget(QLabel("Meetings"))
+        self.meeting_input = QLineEdit()
+        self.meeting_input.setPlaceholderText("Add meeting (e.g., 9:00 AM - Team sync)")
+        layout.addWidget(self.meeting_input)
+        self.meeting_list = QListWidget()
+        layout.addWidget(self.meeting_list)
 
-        # Table
-        self.meetings_table = QTableWidget(0, 2)
-        self.meetings_table.setHorizontalHeaderLabels(["Time", "Description"])
-        self.meetings_table.setSortingEnabled(True)
-        meetings_layout.addWidget(self.meetings_table)
-
-        # Input row
-        input_layout = QHBoxLayout()
-        self.meeting_time_input = QLineEdit()
-        self.meeting_time_input.setPlaceholderText("e.g. 10:30 AM")
-        self.meeting_desc_input = QLineEdit()
-        self.meeting_desc_input.setPlaceholderText("Meeting description")
-        input_layout.addWidget(self.meeting_time_input, 1)
-        input_layout.addWidget(self.meeting_desc_input, 2)
-        meetings_layout.addLayout(input_layout)
-
-        # Button row
-        button_layout = QHBoxLayout()
-        self.add_meeting_button = QPushButton("Add Meeting")
-        self.remove_meeting_button = QPushButton("Remove Meeting")
-        button_layout.addWidget(self.add_meeting_button)
-        button_layout.addWidget(self.remove_meeting_button)
-        meetings_layout.addLayout(button_layout)
-
-        meetings_group.setLayout(meetings_layout)
-        layout.addWidget(meetings_group)
-
-        # --- Notes ---
-        notes_group = QGroupBox("General Notes")
-        notes_layout = QVBoxLayout()
+        # === NOTES SECTION ===
+        layout.addWidget(QLabel("Notes"))
         self.notes_text = QTextEdit()
-        notes_layout.addWidget(self.notes_text)
-        notes_group.setLayout(notes_layout)
-        layout.addWidget(notes_group)
+        layout.addWidget(self.notes_text)
 
-        layout.addStretch()
-
-        # --- Signals ---
-        self.task_input.returnPressed.connect(self._on_task_entered)
-        self.add_meeting_button.clicked.connect(self._on_meeting_added)
-        self.remove_meeting_button.clicked.connect(self._on_remove_meeting_clicked)
-        self.notes_text.textChanged.connect(self._on_notes_changed)
-        self.task_list.itemChanged.connect(self._on_task_checked)
+        # --- Connect signals ---
+        self.task_input.returnPressed.connect(self._on_add_task)
         self.task_list.itemChanged.connect(self._on_task_changed)
-        self.task_list.model().rowsMoved.connect(self._on_rows_moved)
+        self.task_list.customContextMenuRequested.connect(self._on_task_context_menu)
+        #self.task_list.model().rowsMoved.connect(self._on_reordered)
 
-        # Load previous table column widths
-        self.load_meetings_table_state()
+        self.meeting_input.returnPressed.connect(self._on_add_meeting)
+        self.meeting_list.customContextMenuRequested.connect(self._on_meeting_context_menu)
+        self.meeting_list.setContextMenuPolicy(Qt.CustomContextMenu)
 
-    # === Task Methods ===
-    def _populate_tasks(self, tasks):
-        self.task_list.blockSignals(True)
-        self.task_list.clear()
-        for t in tasks:
-            item = QListWidgetItem(t.description)
-            item.setFlags(
-                Qt.ItemIsUserCheckable
-                | Qt.ItemIsEditable
-                | Qt.ItemIsDragEnabled
-                | Qt.ItemIsEnabled
-                | Qt.ItemIsSelectable
-            )
-            item.setCheckState(Qt.Checked if t.complete else Qt.Unchecked)
-            self.task_list.addItem(item)
-        self.task_list.blockSignals(False)
+        self.notes_text.textChanged.connect(self._on_notes_changed)
 
-    def _on_task_entered(self):
+        self.task_list.itemDoubleClicked.connect(self._on_edit_task)
+        self.task_list.itemChanged.connect(self._on_task_changed)
+
+        self._editing_index = None
+        # For later use when making multiple today tabs
+        #self.populate_tasks(task_data.deliverables)
+
+    # === TASK HANDLERS ===
+    def _on_add_task(self):
         text = self.task_input.text().strip()
         if text:
             self.task_added.emit(text)
             self.task_input.clear()
 
-    def _on_task_checked(self, item):
-        index = self.task_list.row(item)
-        if 0 <= index < self.task_list.count():
-            checked = item.checkState() == Qt.Checked
-            self.task_checked.emit(index, checked)
+    def _on_edit_task(self,item):
+        self._editing_index = self.task_list.row(item)
+        self.task_list.editItem(item)
 
-    def _on_task_changed(self, item):
-        index = self.task_list.row(item)
-        new_text = item.text().strip()
-        self.task_edited.emit(index, new_text)
+    def _on_task_changed(self, item: QListWidgetItem):
+        idx = self.task_list.row(item)
+        if idx == self._editing_index:
+            self.task_changed.emit(idx, item.text())
+            self._editing_index = None  
+    
+    def _on_task_key(self,event):
+        if event.key() == Qt.Key_Delete:
+            item = self.task_list.currentItem()
+            if item:
+                idx = self.task_list.row(item)
+                self.task_deleted.emit(idx)
+        else:
+            # default behavior
+            super(QListWidget, self.task_list).keyPressEvent(event)
 
-    def _on_rows_moved(self, parent, start, end, destination, row):
-        if start != row and row <= self.task_list.count():
-            new_index = row if row < start else row - 1
-            self.task_reordered.emit(start, new_index)
+    # Override drop event to detect reordering
+    def dropEvent(self, event):
+        super().dropEvent(event)
 
-    # === Meetings Methods ===
-    def _on_meeting_added(self):
-        time = self.meeting_time_input.text().strip()
-        desc = self.meeting_desc_input.text().strip()
-        if time and desc:
-            self.meeting_added.emit(time, desc)
-            self.meeting_time_input.clear()
-            self.meeting_desc_input.clear()
+        # After the drop finishes, rebuild the order list
+        new_order = []
+        for i in range(self.task_list.count()):
+            item = self.task_list.item(i)
+            new_order.append((item.text(), item.checkState() == Qt.Checked))
 
-    def _on_remove_meeting_clicked(self):
-        row = self.meetings_table.currentRow()
-        if row >= 0:
-            self.meeting_removed.emit(row)
+        # Emit a signal to presenter
+        self.task_reordered.emit(new_order)
 
-    def update_meetings(self, meetings):
-        self.meetings_table.setRowCount(0)
-        for meeting in meetings:
-            row = self.meetings_table.rowCount()
-            self.meetings_table.insertRow(row)
-            self.meetings_table.setItem(row, 0, QTableWidgetItem(meeting.time))
-            self.meetings_table.setItem(row, 1, QTableWidgetItem(meeting.description))
+    def _on_task_context_menu(self, pos: QPoint):
+        item = self.task_list.itemAt(pos)
+        if not item:
+            return
+        menu = QMenu(self)
+        delete_action = menu.addAction("Delete")
+        action = menu.exec(self.task_list.mapToGlobal(pos))
+        if action == delete_action:
+            index = self.task_list.row(item)
+            self.task_deleted.emit(index)
 
-    # === Notes Methods ===
+    # === MEETING HANDLERS ===
+
+    def _on_add_meeting(self):
+        text = self.meeting_input.text().strip()
+        if not text:
+            return
+        self.meeting_added.emit("", text)
+        self.meeting_input.clear()
+
+    def _on_meeting_context_menu(self, pos: QPoint):
+        item = self.meeting_list.itemAt(pos)
+        if not item:
+            return
+        menu = QMenu(self)
+        delete_action = menu.addAction("Delete Meeting")
+        action = menu.exec(self.meeting_list.mapToGlobal(pos))
+        if action == delete_action:
+            index = self.meeting_list.row(item)
+            self.meeting_removed.emit(index)
+
     def _on_notes_changed(self):
         self.notes_changed.emit(self.notes_text.toPlainText())
 
-    def update_notes(self, text):
-        if text != self.notes_text.toPlainText():
-            self.notes_text.setPlainText(text)
+    # === UPDATE METHODS (from Presenter) ===
 
-    # === Persistence Methods ===
-    def save_meetings_table_state(self):
-        widths = [self.meetings_table.columnWidth(i) for i in range(self.meetings_table.columnCount())]
-        try:
-            with open(self.STORAGE_PATH, "w") as f:
-                json.dump(widths, f)
-        except Exception as e:
-            print(f"[WARN] Could not save meetings table state: {e}")
-
-    def load_meetings_table_state(self):
-        if self.STORAGE_PATH.exists():
-            try:
-                with open(self.STORAGE_PATH, "r") as f:
-                    widths = json.load(f)
-                    for i, w in enumerate(widths):
-                        if i < self.meetings_table.columnCount():
-                            self.meetings_table.setColumnWidth(i, w)
-            except Exception as e:
-                print(f"[WARN] Could not load meetings table state: {e}")
-    
     def update_task_list(self, tasks):
-        """
-        Rebuild the QListWidget from the given tasks list.
-        Block signals while populating to avoid spurious itemChanged events.
-        """
+        """Mirror deliverables behavior — stable, safe, persistent UI update."""
         self.task_list.blockSignals(True)
         try:
             self.task_list.clear()
             for task in tasks:
                 item = QListWidgetItem(task.description)
-                # make the item checkable, editable, draggable, selectable
                 item.setFlags(
-                    Qt.ItemIsUserCheckable
+                    item.flags()
+                    | Qt.ItemIsUserCheckable
                     | Qt.ItemIsEditable
-                    | Qt.ItemIsDragEnabled
                     | Qt.ItemIsEnabled
                     | Qt.ItemIsSelectable
                 )
-                # set initial checked state
                 item.setCheckState(Qt.Checked if task.complete else Qt.Unchecked)
                 self.task_list.addItem(item)
         finally:
             self.task_list.blockSignals(False)
+
+    def update_meetings(self, meetings):
+        self.meeting_list.clear()
+        for meeting in meetings:
+            self.meeting_list.addItem(f"{meeting.time} - {meeting.description}")
+
+    def update_notes(self, text):
+        self.notes_text.blockSignals(True)
+        self.notes_text.setPlainText(text or "")
+        self.notes_text.blockSignals(False)
