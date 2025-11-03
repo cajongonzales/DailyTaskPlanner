@@ -138,6 +138,7 @@ class TasksPane(QWidget):
         tab = TaskTab(task_data, task_index=index)
         idx = self.tabs.addTab(tab, task_data.title)
         self.tabs.setCurrentIndex(idx)
+        tab.title_changed.connect(lambda new_title, t=tab: self._on_tab_title_changed(t, new_title))
         return tab
 
     def remove_task_tab(self, index):
@@ -154,3 +155,8 @@ class TasksPane(QWidget):
         idx = self.tabs.currentIndex()
         if idx >= 0:
             self.remove_task_requested.emit(idx)
+        
+    def _on_tab_title_changed(self, tab, new_title):
+        index = self.tabs.indexOf(tab)
+        if index != -1:
+            self.tabs.setTabText(index, new_title)
